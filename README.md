@@ -1,4 +1,4 @@
-# AI_Interpolation
+# NN Interpolation
 A fork of the SuperSloMo repository, modified in various ways to experiment with the capabilitiets of the nural net. 
 Source: https://github.com/avinashpaliwal/Super-SloMo  
 (Special mention of this, which the above builds on: https://github.com/TheFairBear/Super-SlowMo)
