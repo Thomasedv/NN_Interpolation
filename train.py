@@ -23,7 +23,7 @@ parser.add_argument("--train_continue", type=bool, default=False,
                     help='If resuming from checkpoint, set to True and set `checkpoint` path. Default: False.')
 parser.add_argument("--epochs", type=int, default=200, help='number of epochs to train. Default: 200.')
 parser.add_argument("--train_batch_size", type=int, default=1, help='batch size for training. Default: 6.')
-parser.add_argument("--validation_batch_size", type=int, default=5, help='batch size for validation. Default: 10.')
+parser.add_argument("--validation_batch_size", type=int, default=2, help='batch size for validation. Default: 10.')
 parser.add_argument("--init_learning_rate", type=float, default=0.0001,
                     help='set initial learning rate. Default: 0.0001.')
 parser.add_argument("--milestones", type=list, default=[25, 50],
@@ -55,7 +55,7 @@ ArbTimeFlowIntrp.to(device)
 
 trainFlowBackWarp = model.backWarp(640, 640, device)
 trainFlowBackWarp = trainFlowBackWarp.to(device)
-validationFlowBackWarp = model.backWarp(1280, 620, device)
+validationFlowBackWarp = model.backWarp(1280, 640, device)
 validationFlowBackWarp = validationFlowBackWarp.to(device)
 
 ###Load Datasets
@@ -72,7 +72,7 @@ trainset = dataloader.SuperSloMo(root=args.dataset_root + '/train', transform=tr
 trainloader = torch.utils.data.DataLoader(trainset, batch_size=args.train_batch_size, shuffle=True)
 
 validationset = dataloader.SuperSloMo(root=args.dataset_root + '/validation', transform=transform,
-                                      randomCropSize=(750, 750), train=False)
+                                      randomCropSize=(1280, 640), train=False)
 validationloader = torch.utils.data.DataLoader(validationset, batch_size=args.validation_batch_size, shuffle=False)
 
 print(trainset, validationset)
