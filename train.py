@@ -27,7 +27,7 @@ parser.add_argument("--validation_batch_size", type=int, default=2, help='batch 
 parser.add_argument("--init_learning_rate", type=float, default=0.0001,
                     help='set initial learning rate. Default: 0.0001.')
 parser.add_argument("--milestones", type=list, default=[25, 50],
-                    help='Set to epoch values where you want to decrease learning rate by a factor of 0.1. Default: [100, 150]')
+                    help='UNUSED NOW: Set to epoch values where you want to decrease learning rate by a factor of 0.1. Default: [100, 150]')
 parser.add_argument("--progress_iter", type=int, default=100,
                     help='frequency of reporting progress and validation. N: after every N iterations. Default: 100.')
 parser.add_argument("--checkpoint_epoch", type=int, default=5,
@@ -44,6 +44,7 @@ writer = SummaryWriter('log')
 
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
 print(device)
 flowComp = model.UNet(6, 4)
 flowComp.to(device)
@@ -61,7 +62,7 @@ validationFlowBackWarp = validationFlowBackWarp.to(device)
 ###Load Datasets
 
 
-# Channel wise mean calculated on adobe240-fps training dataset
+# Channel wise mean calculated on custom training dataset
 mean = [0.432, 0.433, 0.402]
 std = [1, 1, 1]
 normalize = transforms.Normalize(mean=mean,
@@ -102,7 +103,22 @@ params = list(ArbTimeFlowIntrp.parameters()) + list(flowComp.parameters())
 
 optimizer = optim.Adam(params, lr=args.init_learning_rate)
 # scheduler to decrease learning rate by a factor of 10 at milestones.
-scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=args.milestones, gamma=0.1)
+
+# Patience: Rougly one epoch, suggested value:
+# patience = number of item in train dataset / train_batch_size * (Number of epochs patience)
+# It does say epoch, but in this case, the number of iterations is what's really being worked with.
+# As such, each epoch will be given by the above formula (roughly, if using a rough dataset count)
+# If the model seems to equalize fast, reduce the number of epochs accordingly.
+
+scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min',
+                                                 patience=len(trainloader) / args.train_batch_size,
+                                                 cooldown=len(trainloader) / args.train_batch_size,
+                                                 verbose=True,
+                                                 min_lr=1e-7)
+# Changed to use this to ensure a more adaptivev model.
+# The changed model used here seems to converge or plateau faster with more rapid swings over time.
+# As such letting the model deal with stagnation more proactively than at a set stage seems more useful.
+
 
 ###Initializing VGG16 model for perceptual loss
 
@@ -110,6 +126,7 @@ scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=args.milestones
 vgg16 = torchvision.models.vgg16(pretrained=True)
 vgg16_conv_4_3 = nn.Sequential(*list(vgg16.children())[0][:22])
 vgg16_conv_4_3.to(device)
+
 for param in vgg16_conv_4_3.parameters():
     param.requires_grad = False
 
@@ -137,7 +154,7 @@ def validate():
             F_1_0 = flowOut[:, 2:, :, :]
 
             fCoeff = model.getFlowCoeff(validationFrameIndex, device)
-
+            torch.cuda.empty_cache()
             F_t_0 = fCoeff[0] * F_0_1 + fCoeff[1] * F_1_0
             F_t_1 = fCoeff[2] * F_0_1 + fCoeff[3] * F_1_0
 
@@ -155,9 +172,9 @@ def validate():
             g_I1_F_t_1_f = validationFlowBackWarp(I1, F_t_1_f)
 
             wCoeff = model.getWarpCoeff(validationFrameIndex, device)
-
+            torch.cuda.empty_cache()
             Ft_p = (wCoeff[0] * V_t_0 * g_I0_F_t_0_f + wCoeff[1] * V_t_1 * g_I1_F_t_1_f) / (
-                        wCoeff[0] * V_t_0 + wCoeff[1] * V_t_1)
+                    wCoeff[0] * V_t_0 + wCoeff[1] * V_t_1)
 
             # For tensorboard
             if (flag):
@@ -173,7 +190,7 @@ def validate():
 
             warpLoss = L1_lossFn(g_I0_F_t_0, IFrame) + L1_lossFn(g_I1_F_t_1, IFrame) + L1_lossFn(
                 validationFlowBackWarp(I0, F_1_0), I1) + L1_lossFn(validationFlowBackWarp(I1, F_0_1), I0)
-
+            torch.cuda.empty_cache()
             loss_smooth_1_0 = torch.mean(torch.abs(F_1_0[:, :, :, :-1] - F_1_0[:, :, :, 1:])) + torch.mean(
                 torch.abs(F_1_0[:, :, :-1, :] - F_1_0[:, :, 1:, :]))
             loss_smooth_0_1 = torch.mean(torch.abs(F_0_1[:, :, :, :-1] - F_0_1[:, :, :, 1:])) + torch.mean(
@@ -187,6 +204,7 @@ def validate():
             # psnr
             MSE_val = MSE_LossFn(Ft_p, IFrame)
             psnr += (10 * log10(1 / MSE_val.item()))
+            torch.cuda.empty_cache()
 
     return (psnr / len(validationloader)), (tloss / len(validationloader)), retImg
 
@@ -213,6 +231,9 @@ valPSNR = dict1['valPSNR']
 checkpoint_counter = 0
 
 ### Main training loop
+
+optimizer.step()
+
 for epoch in range(dict1['epoch'] + 1, args.epochs):
     print("Epoch: ", epoch)
 
@@ -221,9 +242,6 @@ for epoch in range(dict1['epoch'] + 1, args.epochs):
     valLoss.append([])
     valPSNR.append([])
     iLoss = 0
-
-    # Increment scheduler count    
-    scheduler.step()
 
     for trainIndex, (trainData, trainFrameIndex) in enumerate(trainloader, 0):
 
@@ -265,12 +283,12 @@ for epoch in range(dict1['epoch'] + 1, args.epochs):
         # Get intermediate frames from the intermediate flows
         g_I0_F_t_0_f = trainFlowBackWarp(I0, F_t_0_f)
         g_I1_F_t_1_f = trainFlowBackWarp(I1, F_t_1_f)
-
+        torch.cuda.empty_cache()
         wCoeff = model.getWarpCoeff(trainFrameIndex, device)
-
+        torch.cuda.empty_cache()
         # Calculate final intermediate frame 
         Ft_p = (wCoeff[0] * V_t_0 * g_I0_F_t_0_f + wCoeff[1] * V_t_1 * g_I1_F_t_1_f) / (
-                    wCoeff[0] * V_t_0 + wCoeff[1] * V_t_1)
+                wCoeff[0] * V_t_0 + wCoeff[1] * V_t_1)
 
         # Loss
         recnLoss = L1_lossFn(Ft_p, IFrame)
@@ -294,7 +312,10 @@ for epoch in range(dict1['epoch'] + 1, args.epochs):
 
         # Backpropagate
         loss.backward()
+        # Increment scheduler count
         optimizer.step()
+        scheduler.step(loss)
+
         iLoss += loss.item()
         torch.cuda.empty_cache()
         # Validation and progress every `args.progress_iter` iterations
@@ -302,6 +323,7 @@ for epoch in range(dict1['epoch'] + 1, args.epochs):
             end = time.time()
 
             psnr, vLoss, valImg = validate()
+
             # torch.cuda.empty_cache()
             valPSNR[epoch].append(psnr)
             valLoss[epoch].append(vLoss)
@@ -320,8 +342,8 @@ for epoch in range(dict1['epoch'] + 1, args.epochs):
 
             print(
                 " Loss: %0.6f  Iterations: %4d/%4d  TrainExecTime: %0.1f  ValLoss:%0.6f  ValPSNR: %0.4f  ValEvalTime: %0.2f LearningRate: %f" % (
-                iLoss / args.progress_iter, trainIndex, len(trainloader), end - start, vLoss, psnr, endVal - end,
-                get_lr(optimizer)))
+                    iLoss / args.progress_iter, trainIndex, len(trainloader), end - start, vLoss, psnr, endVal - end,
+                    get_lr(optimizer)))
 
             # torch.cuda.empty_cache()
             cLoss[epoch].append(iLoss / args.progress_iter)
