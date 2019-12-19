@@ -191,18 +191,22 @@ def main():
                 F_t_1 = fCoeff[2] * F_0_1 + fCoeff[3] * F_1_0
 
                 g_I0_F_t_0 = flowBackWarp(I0, F_t_0)
+                torch.cuda.empty_cache()
                 g_I1_F_t_1 = flowBackWarp(I1, F_t_1)
+                torch.cuda.empty_cache()
 
                 intrpOut = ArbTimeFlowIntrp(
                     torch.cat((I0, I1, F_0_1, F_1_0, F_t_1, F_t_0, g_I1_F_t_1, g_I0_F_t_0), dim=1))
-
+                torch.cuda.empty_cache()
                 F_t_0_f = intrpOut[:, :2, :, :] + F_t_0
                 F_t_1_f = intrpOut[:, 2:4, :, :] + F_t_1
                 V_t_0 = torch.sigmoid(intrpOut[:, 4:5, :, :])
                 V_t_1 = 1 - V_t_0
 
                 g_I0_F_t_0_f = flowBackWarp(I0, F_t_0_f)
+                torch.cuda.empty_cache()
                 g_I1_F_t_1_f = flowBackWarp(I1, F_t_1_f)
+                torch.cuda.empty_cache()
 
                 wCoeff = [1 - t, t]
 

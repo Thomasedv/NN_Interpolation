@@ -63,7 +63,7 @@ validationFlowBackWarp = validationFlowBackWarp.to(device)
 
 
 # Channel wise mean calculated on custom training dataset
-mean = [0.432, 0.433, 0.402]
+mean = [0.43702903766008444, 0.43715053433990597, 0.40436416782660994]
 std = [1, 1, 1]
 normalize = transforms.Normalize(mean=mean,
                                  std=std)
@@ -106,22 +106,21 @@ optimizer = optim.Adam(params, lr=args.init_learning_rate)
 
 # Patience: Rougly one epoch, suggested value:
 # patience = number of item in train dataset / train_batch_size * (Number of epochs patience)
-# It does say epoch, but in this case, the number of iterations is what's really being worked with.
+# It does say epoch, but in this case, the number of progress iterations is what's really being worked with.
 # As such, each epoch will be given by the above formula (roughly, if using a rough dataset count)
 # If the model seems to equalize fast, reduce the number of epochs accordingly.
 
 scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min',
-                                                 patience=len(trainloader) / args.train_batch_size,
-                                                 cooldown=len(trainloader) / args.train_batch_size,
+                                                 patience=len(trainloader) // args.progress_iter * 2,
+                                                 cooldown=len(trainloader) // args.progress_iter * 2,
                                                  verbose=True,
                                                  min_lr=1e-7)
-# Changed to use this to ensure a more adaptivev model.
+
+# Changed to use this to ensure a more adaptive model.
 # The changed model used here seems to converge or plateau faster with more rapid swings over time.
 # As such letting the model deal with stagnation more proactively than at a set stage seems more useful.
 
-
 ###Initializing VGG16 model for perceptual loss
-
 
 vgg16 = torchvision.models.vgg16(pretrained=True)
 vgg16_conv_4_3 = nn.Sequential(*list(vgg16.children())[0][:22])
@@ -130,9 +129,7 @@ vgg16_conv_4_3.to(device)
 for param in vgg16_conv_4_3.parameters():
     param.requires_grad = False
 
-
-### Validation function
-# 
+# Validation function
 
 
 def validate():
@@ -216,6 +213,9 @@ if args.train_continue:
     dict1 = torch.load(args.checkpoint)
     ArbTimeFlowIntrp.load_state_dict(dict1['state_dictAT'])
     flowComp.load_state_dict(dict1['state_dictFC'])
+    for param_group in optimizer.param_groups:
+        param_group['lr'] = dict1.get('learningRate', args.init_learning_rate)
+
 else:
     dict1 = {'loss': [], 'valLoss': [], 'valPSNR': [], 'epoch': -1}
 
@@ -312,14 +312,16 @@ for epoch in range(dict1['epoch'] + 1, args.epochs):
 
         # Backpropagate
         loss.backward()
-        # Increment scheduler count
+
         optimizer.step()
-        scheduler.step(loss)
 
         iLoss += loss.item()
         torch.cuda.empty_cache()
         # Validation and progress every `args.progress_iter` iterations
         if ((trainIndex % args.progress_iter) == args.progress_iter - 1):
+            # Increment scheduler count
+            scheduler.step(iLoss / args.progress_iter)
+
             end = time.time()
 
             psnr, vLoss, valImg = validate()
