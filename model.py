@@ -159,8 +159,8 @@ class UNet(nn.Module):
         # Initialize neural network blocks.
         self.conv1 = nn.Conv2d(inChannels, 32, 9, stride=1, padding=4)
         self.conv2 = nn.Conv2d(32, 32, 9, stride=1, padding=4)
-        self.down1 = down(32, 64, 7)
-        self.down2 = down(64, 128, 5)
+        self.down1 = down(32, 64, 5)
+        self.down2 = down(64, 128, 3)
         self.down3 = down(128, 256, 3)
         self.down4 = down(256, 512, 3)
         self.down5 = down(512, 512, 3)
@@ -270,7 +270,7 @@ class backWarp(nn.Module):
         # stacking X and Y
         grid = torch.stack((x, y), dim=3)
         # Sample pixels using bilinear interpolation.
-        imgOut = torch.nn.functional.grid_sample(img, grid)
+        imgOut = torch.nn.functional.grid_sample(img, grid, align_corners=False)
         return imgOut
 
 

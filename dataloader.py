@@ -27,7 +27,6 @@ def _make_dataset(dir):
             2D list described above.
     """
 
-
     framesPath = []
     # Find and loop over all the clips in root `dir`.
     for index, folder in enumerate(os.listdir(dir)):
@@ -41,6 +40,7 @@ def _make_dataset(dir):
             # Add path to list.
             framesPath[index].append(os.path.join(clipsFolderPath, image))
     return framesPath
+
 
 def _make_video_dataset(dir):
     """
@@ -60,13 +60,13 @@ def _make_video_dataset(dir):
             1D list described above.
     """
 
-
     framesPath = []
     # Find and loop over all the frames in root `dir`.
     for image in sorted(os.listdir(dir)):
         # Add path to list.
         framesPath.append(os.path.join(dir, image))
     return framesPath
+
 
 def _pil_loader(path, cropArea=None, resizeDim=None, frameFlip=0):
     """
@@ -89,7 +89,6 @@ def _pil_loader(path, cropArea=None, resizeDim=None, frameFlip=0):
             2D list described above.
     """
 
-
     # open path as file to avoid ResourceWarning (https://github.com/python-pillow/Pillow/issues/835)
     with open(path, 'rb') as f:
         img = Image.open(f)
@@ -100,8 +99,8 @@ def _pil_loader(path, cropArea=None, resizeDim=None, frameFlip=0):
         # Flip image horizontally if specified.
         flipped_img = cropped_img.transpose(Image.FLIP_LEFT_RIGHT) if frameFlip else cropped_img
         return flipped_img.convert('RGB')
-    
-    
+
+
 class SuperSloMo(data.Dataset):
     """
     A dataloader for loading N samples arranged in this way:
@@ -144,7 +143,6 @@ class SuperSloMo(data.Dataset):
         Returns printable representation of the dataset object.
     """
 
-
     def __init__(self, root, transform=None, dim=(1280, 720), randomCropSize=(640, 640), train=True):
         """
         Parameters
@@ -166,22 +164,21 @@ class SuperSloMo(data.Dataset):
                 samples without randomization. Default: True
         """
 
-
         # Populate the list with image paths for all the
         # frame in `root`.
         framesPath = _make_dataset(root)
         # Raise error if no images found in root.
         if len(framesPath) == 0:
-            raise(RuntimeError("Found 0 files in subfolders of: " + root + "\n"))
-                
-        self.randomCropSize = randomCropSize
-        self.cropX0         = dim[0] - randomCropSize[0]
-        self.cropY0         = dim[1] - randomCropSize[1]
-        self.root           = root
-        self.transform      = transform
-        self.train          = train
+            raise (RuntimeError("Found 0 files in subfolders of: " + root + "\n"))
 
-        self.framesPath     = framesPath
+        self.randomCropSize = randomCropSize
+        self.cropX0 = dim[0] - randomCropSize[0]
+        self.cropY0 = dim[1] - randomCropSize[1]
+        self.root = root
+        self.transform = transform
+        self.train = train
+
+        self.framesPath = framesPath
 
     def __getitem__(self, index):
         """
@@ -206,9 +203,8 @@ class SuperSloMo(data.Dataset):
                 frame before I1 would be 6.
         """
 
-
         sample = []
-        
+
         if (self.train):
             ### Data Augmentation ###
             # To select random 9 frames from 12 frames in a clip
@@ -218,7 +214,7 @@ class SuperSloMo(data.Dataset):
             cropY = random.randint(0, self.cropY0)
             cropArea = (cropX, cropY, cropX + self.randomCropSize[0], cropY + self.randomCropSize[1])
             # Random reverse frame
-            #frameRange = range(firstFrame, firstFrame + 9) if (random.randint(0, 1)) else range(firstFrame + 8, firstFrame - 1, -1)
+            # frameRange = range(firstFrame, firstFrame + 9) if (random.randint(0, 1)) else range(firstFrame + 8, firstFrame - 1, -1)
             IFrameIndex = random.randint(firstFrame + 1, firstFrame + 7)
             if (random.randint(0, 1)):
                 frameRange = [firstFrame, IFrameIndex, firstFrame + 8]
@@ -233,11 +229,11 @@ class SuperSloMo(data.Dataset):
             # For validation/test sets.
             firstFrame = 0
             cropArea = (0, 0, self.randomCropSize[0], self.randomCropSize[1])
-            IFrameIndex = ((index) % 7  + 1)
+            IFrameIndex = ((index) % 7 + 1)
             returnIndex = IFrameIndex - 1
             frameRange = [0, IFrameIndex, 8]
             randomFrameFlip = 0
-        
+
         # Loop over for all frames corresponding to the `index`.
         for frameIndex in frameRange:
             # Open image using pil and augment the image.
@@ -246,9 +242,8 @@ class SuperSloMo(data.Dataset):
             if self.transform is not None:
                 image = self.transform(image)
             sample.append(image)
-            
-        return sample, returnIndex
 
+        return sample, returnIndex
 
     def __len__(self):
         """
@@ -259,7 +254,6 @@ class SuperSloMo(data.Dataset):
             int
                 number of samples.
         """
-
 
         return len(self.framesPath)
 
@@ -273,14 +267,14 @@ class SuperSloMo(data.Dataset):
                 info.
         """
 
-
         fmt_str = 'Dataset ' + self.__class__.__name__ + '\n'
         fmt_str += '    Number of datapoints: {}\n'.format(self.__len__())
         fmt_str += '    Root Location: {}\n'.format(self.root)
         tmp = '    Transforms (if any): '
         fmt_str += '{0}{1}\n'.format(tmp, self.transform.__repr__().replace('\n', '\n' + ' ' * len(tmp)))
         return fmt_str
-    
+
+
 class UCI101Test(data.Dataset):
     """
     A dataloader for loading N samples arranged in this way:
@@ -317,7 +311,6 @@ class UCI101Test(data.Dataset):
         Returns printable representation of the dataset object.
     """
 
-
     def __init__(self, root, transform=None):
         """
         Parameters
@@ -330,17 +323,16 @@ class UCI101Test(data.Dataset):
                 E.g, ``transforms.RandomCrop`` for images.
         """
 
-
         # Populate the list with image paths for all the
         # frame in `root`.
         framesPath = _make_dataset(root)
         # Raise error if no images found in root.
         if len(framesPath) == 0:
-            raise(RuntimeError("Found 0 files in subfolders of: " + root + "\n"))
+            raise (RuntimeError("Found 0 files in subfolders of: " + root + "\n"))
 
-        self.root           = root
-        self.framesPath     = framesPath
-        self.transform      = transform
+        self.root = root
+        self.framesPath = framesPath
+        self.transform = transform
 
     def __getitem__(self, index):
         """
@@ -365,7 +357,6 @@ class UCI101Test(data.Dataset):
                 dataloader where 3 corresponds to the middle frame.
         """
 
-
         sample = []
         # Loop over for all frames corresponding to the `index`.
         for framePath in self.framesPath[index]:
@@ -377,7 +368,6 @@ class UCI101Test(data.Dataset):
             sample.append(image)
         return sample, 3
 
-
     def __len__(self):
         """
         Returns the size of dataset. Invoked as len(datasetObj).
@@ -387,7 +377,6 @@ class UCI101Test(data.Dataset):
             int
                 number of samples.
         """
-
 
         return len(self.framesPath)
 
@@ -401,13 +390,13 @@ class UCI101Test(data.Dataset):
                 info.
         """
 
-
         fmt_str = 'Dataset ' + self.__class__.__name__ + '\n'
         fmt_str += '    Number of datapoints: {}\n'.format(self.__len__())
         fmt_str += '    Root Location: {}\n'.format(self.root)
         tmp = '    Transforms (if any): '
         fmt_str += '{0}{1}\n'.format(tmp, self.transform.__repr__().replace('\n', '\n' + ' ' * len(tmp)))
         return fmt_str
+
 
 class Video(data.Dataset):
     """
@@ -440,7 +429,6 @@ class Video(data.Dataset):
         Returns printable representation of the dataset object.
     """
 
-
     def __init__(self, root, transform=None):
         """
         Parameters
@@ -453,23 +441,22 @@ class Video(data.Dataset):
                 E.g, ``transforms.RandomCrop`` for images.
         """
 
-
         # Populate the list with image paths for all the
         # frame in `root`.
         framesPath = _make_video_dataset(root)
 
         # Get dimensions of frames
-        frame        = _pil_loader(framesPath[0])
+        frame = _pil_loader(framesPath[0])
         self.origDim = frame.size
-        self.dim     = int(self.origDim[0] / 32) * 32, int(self.origDim[1] / 32) * 32
+        self.dim = int(self.origDim[0] / 32) * 32, int(self.origDim[1] / 32) * 32
 
         # Raise error if no images found in root.
         if len(framesPath) == 0:
-            raise(RuntimeError("Found 0 files in: " + root + "\n"))
+            raise (RuntimeError("Found 0 files in: " + root + "\n"))
 
-        self.root           = root
-        self.framesPath     = framesPath
-        self.transform      = transform
+        self.root = root
+        self.framesPath = framesPath
+        self.transform = transform
 
     def __getitem__(self, index):
         """
@@ -489,7 +476,6 @@ class Video(data.Dataset):
                 `index` and I1 is the next frame.
         """
 
-
         sample = []
         # Loop over for all frames corresponding to the `index`.
         for framePath in [self.framesPath[index], self.framesPath[index + 1]]:
@@ -501,7 +487,6 @@ class Video(data.Dataset):
             sample.append(image)
         return sample
 
-
     def __len__(self):
         """
         Returns the size of dataset. Invoked as len(datasetObj).
@@ -512,11 +497,10 @@ class Video(data.Dataset):
                 number of samples.
         """
 
-
         # Using `-1` so that dataloader accesses only upto
         # frames [N-1, N] and not [N, N+1] which because frame
         # N+1 doesn't exist.
-        return len(self.framesPath) - 1 
+        return len(self.framesPath) - 1
 
     def __repr__(self):
         """
@@ -527,7 +511,6 @@ class Video(data.Dataset):
             string
                 info.
         """
-
 
         fmt_str = 'Dataset ' + self.__class__.__name__ + '\n'
         fmt_str += '    Number of datapoints: {}\n'.format(self.__len__())
