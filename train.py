@@ -6,6 +6,7 @@ import torch
 import torchvision
 import torchvision.transforms as transforms
 import torch.optim as optim
+from torch.optim.adamw import AdamW
 import torch.nn as nn
 import model
 import dataloader
@@ -98,8 +99,8 @@ def train():
 
     params = list(ArbTimeFlowIntrp.parameters()) + list(flowComp.parameters())
 
-    # optimizer = optim.Adam(params, lr=args.init_learning_rate, amsgrad=True)
-    optimizer = optim.SGD(params, lr=args.init_learning_rate, momentum=0.9, nesterov=True)
+    optimizer = AdamW(params, lr=args.init_learning_rate)
+    # optimizer = optim.SGD(params, lr=args.init_learning_rate, momentum=0.9, nesterov=True)
 
     # scheduler to decrease learning rate by a factor of 10 at milestones.
     # Patience suggested value:
@@ -210,7 +211,10 @@ def train():
         dict1 = torch.load(args.checkpoint)
         ArbTimeFlowIntrp.load_state_dict(dict1['state_dictAT'])
         flowComp.load_state_dict(dict1['state_dictFC'])
-        optimizer.load_state_dict(dict1['state_optimizer'])
+
+        optimizer.load_state_dict(dict1.get('state_optimizer', {}))
+        scheduler.load_state_dict(dict1.get('state_scheduler', {}))
+
         for param_group in optimizer.param_groups:
             param_group['lr'] = dict1.get('learningRate', args.init_learning_rate)
 
@@ -365,6 +369,7 @@ def train():
                 'state_dictFC': flowComp.state_dict(),
                 'state_dictAT': ArbTimeFlowIntrp.state_dict(),
                 'state_optimizer': optimizer.state_dict(),
+                'state_scheduler': scheduler.state_dict()
             }
             torch.save(dict1, args.checkpoint_dir + "/SuperSloMo" + str(checkpoint_counter) + ".ckpt")
             checkpoint_counter += 1
