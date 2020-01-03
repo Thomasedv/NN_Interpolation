@@ -12,7 +12,7 @@ parser.add_argument("--videos_folder", type=str, required=True, help='path to th
 parser.add_argument("--dataset_folder", type=str, required=True, help='path to the output dataset folder')
 parser.add_argument("--img_width", type=int, default=1280, help="output image width")
 parser.add_argument("--img_height", type=int, default=720, help="output image height")
-parser.add_argument("--train_test_split", type=tuple, default=(90, 10), help="train test split for custom dataset")
+parser.add_argument("--train_test_split", type=tuple, default=(95, 5), help="train test split for custom dataset")
 args = parser.parse_args()
 
 
@@ -34,10 +34,9 @@ def extract_frames(videos, inDir, outDir):
         None
     """
 
-
     for video in videos:
         os.mkdir(os.path.join(outDir, os.path.splitext(video)[0]))
-        retn = os.system('{} -i {} -vf scale={}:{} -vsync 0 -qscale:v 2 {}/%04d.jpg'.format(os.path.join(args.ffmpeg_dir, "ffmpeg"), os.path.join(inDir, video), args.img_width, args.img_height, os.path.join(outDir, os.path.splitext(video)[0])))
+        retn = os.system('{} -i {} -vf scale={}:{} -vsync 0 -qscale:v 2 {}/%08d.jpg'.format(os.path.join(args.ffmpeg_dir, "ffmpeg"), os.path.join(inDir, video), args.img_width, args.img_height, os.path.join(outDir, os.path.splitext(video)[0])))
         if retn:
             print("Error converting file:{}. Exiting.".format(video))
 

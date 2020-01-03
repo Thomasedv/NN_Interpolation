@@ -97,7 +97,7 @@ def _pil_loader(path, cropArea=None, resizeDim=None, frameFlip=0):
         # Crop image if crop area specified.
         cropped_img = img.crop(cropArea) if (cropArea != None) else resized_img
         # Flip image horizontally if specified.
-        flipped_img = cropped_img.transpose(Image.FLIP_LEFT_RIGHT) if frameFlip else cropped_img
+        flipped_img = cropped_img.transpose([Image.FLIP_LEFT_RIGHT, Image.FLIP_TOP_BOTTOM][frameFlip-1]) if frameFlip else cropped_img
         return flipped_img.convert('RGB')
 
 
@@ -223,7 +223,7 @@ class SuperSloMo(data.Dataset):
                 frameRange = [firstFrame + 8, IFrameIndex, firstFrame]
                 returnIndex = firstFrame - IFrameIndex + 7
             # Random flip frame
-            randomFrameFlip = random.randint(0, 1)
+            randomFrameFlip = random.randint(0, 2)
         else:
             # Fixed settings to return same samples every epoch.
             # For validation/test sets.

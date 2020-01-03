@@ -86,7 +86,7 @@ class up(nn.Module):
         block.
     """
 
-    def __init__(self, inChannels, outChannels):
+    def __init__(self, inChannels, outChannels, filterSize=3):
         """
         Parameters
         ----------
@@ -100,9 +100,9 @@ class up(nn.Module):
 
         super(up, self).__init__()
         # Initialize convolutional layers.
-        self.conv1 = nn.Conv2d(inChannels + outChannels, outChannels, 3, stride=1, padding=1)
+        self.conv1 = nn.Conv2d(inChannels + outChannels, outChannels, filterSize, stride=1, padding=int((filterSize - 1) / 2))
         # (2 * outChannels) is used for accommodating skip connection.
-        self.conv2 = nn.Conv2d(outChannels, outChannels, 3, stride=1, padding=1)
+        self.conv2 = nn.Conv2d(outChannels, outChannels, filterSize, stride=1, padding=int((filterSize - 1) / 2))
 
     def forward(self, x, skpCn):
         """
@@ -124,9 +124,9 @@ class up(nn.Module):
 
         # Bilinear interpolation with scaling 2.
         x = F.interpolate(x, scale_factor=2, mode='bilinear', align_corners=False)
-        # Convolution + Leaky ReLU
-        x = F.leaky_relu(self.conv1(torch.cat((x, skpCn), 1)), negative_slope=0.1)
         # Convolution + Leaky ReLU on (`x`, `skpCn`)
+        x = F.leaky_relu(self.conv1(torch.cat((x, skpCn), 1)), negative_slope=0.1)
+        # Convolution + Leaky ReLU
         x = F.leaky_relu(self.conv2(x), negative_slope=0.1)
         return x
 
@@ -158,7 +158,7 @@ class UNet(nn.Module):
         super(UNet, self).__init__()
         # Initialize neural network blocks.
         self.conv1 = nn.Conv2d(inChannels, 32, 9, stride=1, padding=4)
-        self.conv2 = nn.Conv2d(32, 32, 9, stride=1, padding=4)
+        self.conv2 = nn.Conv2d(32, 32, 7, stride=1, padding=3)
         self.down1 = down(32, 64, 5)
         self.down2 = down(64, 128, 3)
         self.down3 = down(128, 256, 3)

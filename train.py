@@ -15,8 +15,6 @@ from math import log10
 import datetime
 from tensorboardX import SummaryWriter
 
-writer = SummaryWriter('log')
-
 
 def train():
     global writer
@@ -29,13 +27,13 @@ def train():
     parser.add_argument("--train_continue", type=bool, default=False,
                         help='If resuming from checkpoint, set to True and set `checkpoint` path. Default: False.')
     parser.add_argument("--epochs", type=int, default=200, help='number of epochs to train. Default: 200.')
-    parser.add_argument("--train_batch_size", type=int, default=1, help='batch size for training. Default: 6.')
-    parser.add_argument("--validation_batch_size", type=int, default=2, help='batch size for validation. Default: 10.')
-    parser.add_argument("--init_learning_rate", type=float, default=0.00009,
+    parser.add_argument("--train_batch_size", type=int, default=3, help='batch size for training. Default: 6.')
+    parser.add_argument("--validation_batch_size", type=int, default=6, help='batch size for validation. Default: 10.')
+    parser.add_argument("--init_learning_rate", type=float, default=0.0001,
                         help='set initial learning rate. Default: 0.0001.')
     parser.add_argument("--milestones", type=list, default=[25, 50],
                         help='UNUSED NOW: Set to epoch values where you want to decrease learning rate by a factor of 0.1. Default: [100, 150]')
-    parser.add_argument("--progress_iter", type=int, default=100,
+    parser.add_argument("--progress_iter", type=int, default=200,
                         help='frequency of reporting progress and validation. N: after every N iterations. Default: 100.')
     parser.add_argument("--checkpoint_epoch", type=int, default=5,
                         help='checkpoint saving frequency. N: after every N epochs. Each checkpoint is roughly of size 151 MB.Default: 5.')
@@ -43,7 +41,6 @@ def train():
 
     ##[TensorboardX](https://github.com/lanpa/tensorboardX)
     ### For visualizing loss and interpolated frames
-
 
     ###Initialize flow computation and arbitrary-time flow interpolation CNNs.
 
@@ -57,26 +54,34 @@ def train():
 
     ###Initialze backward warpers for train and validation datasets
 
-    trainFlowBackWarp = model.backWarp(640, 640, device)
+    train_W_dim = 352
+    train_H_dim = 352
+
+    trainFlowBackWarp = model.backWarp(train_W_dim, train_H_dim, device)
     trainFlowBackWarp = trainFlowBackWarp.to(device)
-    validationFlowBackWarp = model.backWarp(1280, 640, device)
+    validationFlowBackWarp = model.backWarp(train_W_dim * 2, train_H_dim, device)
     validationFlowBackWarp = validationFlowBackWarp.to(device)
 
     ###Load Datasets
 
     # Channel wise mean calculated on custom training dataset
-    mean = [0.43702903766008444, 0.43715053433990597, 0.40436416782660994]
+    # mean = [0.43702903766008444, 0.43715053433990597, 0.40436416782660994]
+    mean = [0.5] * 3
     std = [1, 1, 1]
     normalize = transforms.Normalize(mean=mean,
                                      std=std)
     transform = transforms.Compose([transforms.ToTensor(), normalize])
 
-    trainset = dataloader.SuperSloMo(root=args.dataset_root + '/train', transform=transform, train=True)
-    trainloader = torch.utils.data.DataLoader(trainset, batch_size=args.train_batch_size, shuffle=True)
+    trainset = dataloader.SuperSloMo(root=args.dataset_root + '/train', randomCropSize=(train_W_dim, train_H_dim),
+                                     transform=transform, train=True)
+    trainloader = torch.utils.data.DataLoader(trainset, batch_size=args.train_batch_size, shuffle=True, num_workers=2,
+                                              pin_memory=True)
 
     validationset = dataloader.SuperSloMo(root=args.dataset_root + '/validation', transform=transform,
-                                          randomCropSize=(1280, 640), train=False)
-    validationloader = torch.utils.data.DataLoader(validationset, batch_size=args.validation_batch_size, shuffle=False)
+                                          randomCropSize=(2 * train_W_dim, train_H_dim), train=False)
+    validationloader = torch.utils.data.DataLoader(validationset, batch_size=args.validation_batch_size, shuffle=False,
+                                                   num_workers=2,
+                                                   pin_memory=True)
 
     print(trainset, validationset)
 
@@ -97,9 +102,15 @@ def train():
     L1_lossFn = nn.L1Loss()
     MSE_LossFn = nn.MSELoss()
 
+    if args.train_continue:
+        dict1 = torch.load(args.checkpoint)
+        last_epoch = dict1['epoch'] * len(trainloader)
+    else:
+        last_epoch = -1
+
     params = list(ArbTimeFlowIntrp.parameters()) + list(flowComp.parameters())
 
-    optimizer = AdamW(params, lr=args.init_learning_rate)
+    optimizer = AdamW(params, lr=args.init_learning_rate, amsgrad=True)
     # optimizer = optim.SGD(params, lr=args.init_learning_rate, momentum=0.9, nesterov=True)
 
     # scheduler to decrease learning rate by a factor of 10 at milestones.
@@ -109,12 +120,21 @@ def train():
     # As such, each epoch will be given by the above formula (roughly, if using a rough dataset count)
     # If the model seems to equalize fast, reduce the number of epochs accordingly.
 
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min',
+    # scheduler = optim.lr_scheduler.CyclicLR(optimizer,
+    #                                         base_lr=1e-8,
+    #                                         max_lr=9.0e-3,
+    #                                         step_size_up=3500,
+    #                                         mode='triangular2',
+    #                                         cycle_momentum=False,
+    #                                         last_epoch=last_epoch)
+
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer,
+                                                     mode='min',
                                                      factor=0.1,
-                                                     patience=len(trainloader) // args.progress_iter,
-                                                     cooldown=len(trainloader) // args.progress_iter,
+                                                     patience=len(trainloader) * 3,
+                                                     cooldown=len(trainloader) * 2,
                                                      verbose=True,
-                                                     min_lr=1e-7)
+                                                     min_lr=1e-8)
 
     # Changed to use this to ensure a more adaptive model.
     # The changed model used here seems to converge or plateau faster with more rapid swings over time.
@@ -208,7 +228,6 @@ def train():
     ### Initialization
 
     if args.train_continue:
-        dict1 = torch.load(args.checkpoint)
         ArbTimeFlowIntrp.load_state_dict(dict1['state_dictAT'])
         flowComp.load_state_dict(dict1['state_dictFC'])
 
@@ -252,7 +271,6 @@ def train():
             I0 = frame0.to(device)
             I1 = frame1.to(device)
             IFrame = frameT.to(device)
-
             optimizer.zero_grad()
             # torch.cuda.empty_cache()
             # Calculate flow between reference frames I0 and I1
@@ -312,9 +330,10 @@ def train():
             loss = 204 * recnLoss + 102 * warpLoss + 0.005 * prcpLoss + loss_smooth
 
             # Backpropagate
-            loss.backward()
 
+            loss.backward()
             optimizer.step()
+            scheduler.step(loss.item())
 
             iLoss += loss.item()
             torch.cuda.empty_cache()
@@ -326,7 +345,7 @@ def train():
                 end = time.time()
 
                 psnr, vLoss, valImg = validate()
-
+                optimizer.zero_grad()
                 # torch.cuda.empty_cache()
                 valPSNR[epoch].append(psnr)
                 valLoss[epoch].append(vLoss)
@@ -378,8 +397,14 @@ def train():
 if __name__ == '__main__':
     # Ensure tensorboardx closes properly.
     try:
+        writer = SummaryWriter('log')
         train()
-    except:
+    except Exception as e:
+        if not isinstance(e, KeyboardInterrupt):
+            import traceback
+
+            traceback.print_exc()
+    finally:
         writer.close()
         print('\n\nWriter closed')
         print('Exiting program')
